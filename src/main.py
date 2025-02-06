@@ -11,11 +11,12 @@ from queue import Queue, Empty
 
 from legolas_common.src.packet_types import BROADCAST_DEST, Packet, PacketType
 from legolas_common.src.socket_client import SocketClient
-
+#TODO: change legolas_common/src/socket_client to not consume packets from incoming queue
 
 
 class ReadIncomingMsgThread(QThread):
-    change_incoming_message = pyqtSignal(Packet)
+    change_incoming_message = pyqtSignal(Packet) # change when internal and control
+    change_picture = pyqtSignal(Packet) # change with image? 
 
     def __init__(self, incoming_data: Queue):
         super().__init__()
@@ -65,6 +66,7 @@ class GUI(QWidget):
         self.incoming_data = incoming_data
         self.outgoing_data = outgoing_data
         self.update_thread.start()
+        # send one signup/registration message at the beginning
 
     def on_click(self):
         print("send button pressed")
@@ -92,7 +94,7 @@ class GUI(QWidget):
     @staticmethod # move this somewhere else where it makes more sense?
     def packet_to_str( msg : Packet) -> str:
         # print(f"From {msg.packet_address}: ", end="")
-        print("WERE TRYING TO CHANGE THE LABEL")
+        # print("WERE TRYING TO CHANGE THE LABEL")
         if msg.packet_type == PacketType.INTERNAL:
             return f"Received internal: {msg.payload}"
         elif msg.packet_type == PacketType.CONTROL:
@@ -108,6 +110,7 @@ if __name__ == "__main__":
     global_incoming_data: Queue[Packet] = Queue()
     global_outgoing_data: Queue[Packet] = Queue()
     client = SocketClient("127.0.0.1", 12348, global_outgoing_data, global_incoming_data)
+    # client = SocketClient("10.0.0.3", 12345, global_outgoing_data, global_incoming_data)
     a = GUI(global_outgoing_data, global_incoming_data)
     a.show()
     client.run()
