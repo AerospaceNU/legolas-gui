@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QApplication, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QWidget
-from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QPixmap, QImage, QMouseEvent
+from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot, Qt
 import sys
 # need to add pyqt5 to prerequisites
 
@@ -31,8 +31,8 @@ class ReadIncomingMsgThread(QThread):
                 new_packet = self.incoming_data.get_nowait() # need to make sure socket_client isn't eating these messages first
                 print("RECEIVED MESSAGE FROM SERVER", GUI.packet_to_str(new_packet))
                 print("LENGTH OF INCOMING QUEUE", self.incoming_data.qsize())
-                if new_packet.packet_type == PacketType.CONTROL:
-                    print("TIME DIFFERENTIAL", time.time() - new_packet.payload["time"])
+                # if new_packet.packet_type == PacketType.CONTROL:
+                #     print("TIME DIFFERENTIAL", time.time() - new_packet.payload["time"])
                 if new_packet.packet_type == PacketType.IMAGE:
                     self.change_picture.emit(new_packet)
                 else:
@@ -61,6 +61,7 @@ class GUI(QWidget):
         self.original_img = True
 
         self.label_img.setPixmap(pixmap)
+        self.label_img.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         layout = QHBoxLayout(self)
         layout.addWidget(self.incoming_msg_label)
@@ -77,6 +78,7 @@ class GUI(QWidget):
         self.outgoing_data = outgoing_data
         self.update_thread.start()
         # send one signup/registration message at the beginning
+        self.bounds = []
 
     def on_click(self):
         print("send button pressed")
@@ -91,7 +93,13 @@ class GUI(QWidget):
 
         """Updates the image_label with a new opencv image"""
         qt_img = self.convert_cv_qt(msg.payload)
+        new_width = qt_img.width()
+        new_height = qt_img.height()
+        if new_height != self.height and new_width != self.width:
+            # self.w_ratio =
+            pass 
         self.label_img.setPixmap(qt_img)
+        self.label_img.setAlignment(Qt.AlignmentFlag.AlignTop)
     
     def convert_cv_qt(self, cv_img):
         """Convert from an opencv image to QPixmap"""
@@ -101,9 +109,46 @@ class GUI(QWidget):
         convert_to_Qt_format = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
         # p = convert_to_Qt_format.scaled(self.disply_width, self.display_height, Qt.KeepAspectRatio)
         return QPixmap.fromImage(convert_to_Qt_format)
+    
+    def update_bounding_box(self, payload):
+        box_num = payload["bounding_box"]
+        cur_boxes = []
+        for i in range(box_num):
+            cur_boxes.append(payload[f"bb{i}"])
+        self.bounds = cur_boxes
+        print("new self bounds", self.bounds)
+
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == 1:  # Left mouse button
+            print(f"Left mouse button pressed at: ({event.x()}, {event.y()})")
+            top_left_of_image =  self.label_img.pos()
+            click_posn_in_image = (event.x() - top_left_of_image.x(), event.y() - top_left_of_image.y())
+            print("CLICK POSN IN IMAGE", click_posn_in_image)
+            print("CURRENT BOUNDS", self.bounds)
+            for i, box in enumerate(self.bounds):
+                if click_posn_in_image[0] >= box[0][0] and click_posn_in_image[0] <= box[1][0]:
+                    if click_posn_in_image[1] >= box[0][1] and click_posn_in_image[1] <= box[1][1]:
+                        print("send button pressed")
+                        self.outgoing_data.put(Packet(
+                                        PacketType.CONTROL,
+                                        BROADCAST_DEST,  # This doesn't actually matter
+                                        {"hello": "server", "time": time.time(), "chosen_box": i},
+                        ))
+
+        # elif event.button() == 2: # Right mouse button
+        #      print(f"Right mouse button pressed at: ({event.x()}, {event.y()})")
+        # elif event.button() == 4: # Middle mouse button
+        #      print(f"Middle mouse button pressed at: ({event.x()}, {event.y()})")
+
+
+
 
     @pyqtSlot(Packet)
     def update_incoming_msg(self, msg: Packet):
+        if msg.packet_type == PacketType.CONTROL:
+            if "bounding_box" in msg.payload.keys():
+                print("updating bounding box")
+                self.update_bounding_box(msg.payload)
         text = GUI.packet_to_str(msg)
         self.incoming_msg_label.setText(text)
 
@@ -119,13 +164,14 @@ class GUI(QWidget):
             return "Received image"
         else:
             return f"Received ack: {msg.payload}"
+    
 
 
 if __name__ == "__main__":
     app = QApplication([])
     global_incoming_data: Queue[Packet] = Queue()
     global_outgoing_data: Queue[Packet] = Queue()
-    client = SocketClient("127.0.0.1", 12348, global_outgoing_data, global_incoming_data)
+    client = SocketClient("127.0.0.1", 12345, global_outgoing_data, global_incoming_data)
     # client = SocketClient("10.0.0.3", 12345, global_outgoing_data, global_incoming_data)
     a = GUI(global_outgoing_data, global_incoming_data)
     a.show()
