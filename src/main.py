@@ -1,34 +1,45 @@
-from PyQt5.QtWidgets import QApplication, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QWidget
-from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot
 import sys
+import time
+from queue import Empty, Queue
+
+import cv2
+from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from legolas_common.src.packet_types import BROADCAST_DEST, Packet, PacketType
+from legolas_common.src.socket_client import SocketClient
+
 # need to add pyqt5 to prerequisites
 
 # https://imagetracking.org.uk/2020/12/displaying-opencv-images-in-pyqt/
 
-import time
-from queue import Queue, Empty
-import cv2
 
-from legolas_common.src.packet_types import BROADCAST_DEST, Packet, PacketType
-from legolas_common.src.socket_client import SocketClient
-#TODO: ensure legolas_common/src/socket_client does not consume packets from incoming queue
+# TODO: ensure legolas_common/src/socket_client does not consume packets from incoming queue
 
 
 class ReadIncomingMsgThread(QThread):
-    change_incoming_message = pyqtSignal(Packet) # change when internal and control
-    change_picture = pyqtSignal(Packet) # change with image? 
+    change_incoming_message = pyqtSignal(Packet)  # change when internal and control
+    change_picture = pyqtSignal(Packet)  # change with image?
 
     def __init__(self, incoming_data: Queue):
         super().__init__()
         self.incoming_data = incoming_data
 
-
     def run(self):
         while True:
-            # time.sleep(1)
+            time.sleep(0.00001)
             try:
-                new_packet = self.incoming_data.get_nowait() # need to make sure socket_client isn't eating these messages first
+                new_packet = (
+                    self.incoming_data.get_nowait()
+                )  # need to make sure socket_client isn't eating these messages first
                 print("RECEIVED MESSAGE FROM SERVER", GUI.packet_to_str(new_packet))
                 print("LENGTH OF INCOMING QUEUE", self.incoming_data.qsize())
                 if new_packet.packet_type == PacketType.CONTROL:
@@ -40,14 +51,10 @@ class ReadIncomingMsgThread(QThread):
             except Empty:
                 # print("no msg from server")
                 continue
-            
-           
-
-
 
 
 class GUI(QWidget):
-    def __init__(self, outgoing_data: Queue, incoming_data: Queue ):
+    def __init__(self, outgoing_data: Queue, incoming_data: Queue):
         super().__init__()
         self.setWindowTitle("LEGOLAS GUI")
         self.label_img = QLabel(parent=self)
@@ -67,7 +74,7 @@ class GUI(QWidget):
         layout.addWidget(self.label_img)
         layout.addWidget(self.button)
         # layout.addWidget(self.change_img_button)
-    
+
         self.setLayout(layout)
 
         self.update_thread = ReadIncomingMsgThread(incoming_data)
@@ -80,19 +87,20 @@ class GUI(QWidget):
 
     def on_click(self):
         print("send button pressed")
-        self.outgoing_data.put(Packet(
-                        PacketType.CONTROL,
-                        BROADCAST_DEST,  # This doesn't actually matter
-                        {"hello": "server", "time": time.time()},
-                    ))
+        self.outgoing_data.put(
+            Packet(
+                PacketType.CONTROL,
+                BROADCAST_DEST,  # This doesn't actually matter
+                {"hello": "server", "time": time.time()},
+            )
+        )
 
     @pyqtSlot(Packet)
     def change_img(self, msg: Packet):
-
         """Updates the image_label with a new opencv image"""
         qt_img = self.convert_cv_qt(msg.payload)
         self.label_img.setPixmap(qt_img)
-    
+
     def convert_cv_qt(self, cv_img):
         """Convert from an opencv image to QPixmap"""
         rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
@@ -107,8 +115,8 @@ class GUI(QWidget):
         text = GUI.packet_to_str(msg)
         self.incoming_msg_label.setText(text)
 
-    @staticmethod # move this somewhere else where it makes more sense?
-    def packet_to_str( msg : Packet) -> str:
+    @staticmethod  # move this somewhere else where it makes more sense?
+    def packet_to_str(msg: Packet) -> str:
         # print(f"From {msg.packet_address}: ", end="")
         # print("WERE TRYING TO CHANGE THE LABEL")
         if msg.packet_type == PacketType.INTERNAL:
@@ -125,7 +133,7 @@ if __name__ == "__main__":
     app = QApplication([])
     global_incoming_data: Queue[Packet] = Queue()
     global_outgoing_data: Queue[Packet] = Queue()
-    client = SocketClient("127.0.0.1", 12348, global_outgoing_data, global_incoming_data)
+    client = SocketClient("127.0.0.1", 12345, global_outgoing_data, global_incoming_data)
     # client = SocketClient("10.0.0.3", 12345, global_outgoing_data, global_incoming_data)
     a = GUI(global_outgoing_data, global_incoming_data)
     a.show()
