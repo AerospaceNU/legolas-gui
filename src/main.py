@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from legolas_common.src.frame_annotator import draw_tracked_object
 from legolas_common.src.packet_types import BROADCAST_DEST, Packet, PacketType
 from legolas_common.src.socket_client import SocketClient
 
@@ -40,16 +41,12 @@ class ReadIncomingMsgThread(QThread):
                 new_packet = (
                     self.incoming_data.get_nowait()
                 )  # need to make sure socket_client isn't eating these messages first
-                print("RECEIVED MESSAGE FROM SERVER", GUI.packet_to_str(new_packet))
-                print("LENGTH OF INCOMING QUEUE", self.incoming_data.qsize())
-                if new_packet.packet_type == PacketType.CONTROL:
-                    print("TIME DIFFERENTIAL", time.time() - new_packet.payload["time"])
+
                 if new_packet.packet_type == PacketType.IMAGE:
                     self.change_picture.emit(new_packet)
                 else:
                     self.change_incoming_message.emit(new_packet)
             except Empty:
-                # print("no msg from server")
                 continue
 
 
@@ -83,6 +80,7 @@ class GUI(QWidget):
         self.incoming_data = incoming_data
         self.outgoing_data = outgoing_data
         self.update_thread.start()
+        self.annotations_list = []
         # send one signup/registration message at the beginning
 
     def on_click(self):
@@ -98,7 +96,10 @@ class GUI(QWidget):
     @pyqtSlot(Packet)
     def change_img(self, msg: Packet):
         """Updates the image_label with a new opencv image"""
-        qt_img = self.convert_cv_qt(msg.payload)
+        payload_img = msg.payload
+        for annotation in self.annotations_list:
+            draw_tracked_object(payload_img, annotation)
+        qt_img = self.convert_cv_qt(payload_img)
         self.label_img.setPixmap(qt_img)
 
     def convert_cv_qt(self, cv_img):
@@ -112,8 +113,8 @@ class GUI(QWidget):
 
     @pyqtSlot(Packet)
     def update_incoming_msg(self, msg: Packet):
-        text = GUI.packet_to_str(msg)
-        self.incoming_msg_label.setText(text)
+        if msg.packet_type == PacketType.CONTROL and "frame_detections" in msg.payload:
+            self.annotations_list = msg.payload["frame_detections"]
 
     @staticmethod  # move this somewhere else where it makes more sense?
     def packet_to_str(msg: Packet) -> str:
