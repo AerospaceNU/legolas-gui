@@ -1,7 +1,8 @@
 import sys
 
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPainter, QPixmap
+import cv2
+from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QFont, QImage, QPainter, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -12,7 +13,19 @@ from PyQt5.QtWidgets import (
 )
 
 
+def convert_cv_qt(self, cv_img):
+    """Convert from an opencv image to QPixmap"""
+    rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+    h, w, ch = rgb_image.shape
+    bytes_per_line = ch * w
+    convert_to_Qt_format = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+    # p = convert_to_Qt_format.scaled(self.disply_width, self.display_height, Qt.KeepAspectRatio)
+    return QPixmap.fromImage(convert_to_Qt_format)
+
+
 class ImageLabel(QLabel):
+    image_click_event = pyqtSignal(tuple)
+
     def __init__(self):
         super().__init__()
         self.setAlignment(Qt.AlignLeft | Qt.AlignTop)  # Still good for fallback
@@ -21,7 +34,17 @@ class ImageLabel(QLabel):
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         self.scaled_pixmap = None
 
-    def resizeEvent(self, event):
+    def update_image(self, image):
+        qt_img = convert_cv_qt(image)
+        self.original_pixmap = qt_img
+        self.update()
+
+    def resizeEvent(self, _):
+
+        self.update()  # Trigger repaint
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
         if not self.original_pixmap.isNull():
             self.scaled_pixmap = self.original_pixmap.scaled(
                 self.size().width(),  # Full label width
@@ -29,10 +52,6 @@ class ImageLabel(QLabel):
                 Qt.KeepAspectRatio,
                 Qt.SmoothTransformation,
             )
-        self.update()  # Trigger repaint
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
         if self.scaled_pixmap:
             painter = QPainter(self)
             # Compute left margin to center horizontally
@@ -55,22 +74,35 @@ class ImageLabel(QLabel):
             scale_y = self.original_pixmap.height() / self.scaled_pixmap.height()
             orig_x = int(click_x * scale_x)
             orig_y = int(click_y * scale_y)
-            print(f"Clicked on image at: ({orig_x}, {orig_y})")
-        else:
-            print("Clicked outside the image area.")
+            self.image_click_event.emit((orig_x, orig_y))
+        # else:
+        #     print("Clicked outside the image area.")
 
 
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
+        font = QFont()
+        font.setPointSize(20)  # Set text size to 20 points
+
         self.setWindowTitle("Custom Layout")
 
         # === Top Bar (10% height) ===
         top_bar = QWidget()
         top_layout = QHBoxLayout(top_bar)
         top_layout.setContentsMargins(5, 5, 5, 5)
-        for i in range(5):
-            top_layout.addWidget(QLabel(f"Top Label {i+1}"))
+
+        def add_top_layout_label(text):
+            label = QLabel(text)
+            label.setFont(font)
+            label.setAlignment(Qt.AlignCenter)
+            top_layout.addWidget(label, alignment=Qt.AlignCenter)
+            return label
+
+        add_top_layout_label("Tracking Status:")
+        track_status = add_top_layout_label("Not Tracking")
+        add_top_layout_label("Recording Status:")
+        track_status = add_top_layout_label("Not Recording")
 
         # === Main Content ===
         main_content = QWidget()

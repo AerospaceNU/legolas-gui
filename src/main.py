@@ -27,8 +27,7 @@ from legolas_common.src.socket_client import SocketClient
 
 
 class ReadIncomingMsgThread(QThread):
-    change_incoming_message = pyqtSignal(Packet)  # change when internal and control
-    change_picture = pyqtSignal(Packet)  # change with image?
+    recieve_packet = pyqtSignal(Packet)  # change when internal and control
 
     def __init__(self, incoming_data: Queue):
         super().__init__()
@@ -42,10 +41,7 @@ class ReadIncomingMsgThread(QThread):
                     self.incoming_data.get_nowait()
                 )  # need to make sure socket_client isn't eating these messages first
 
-                if new_packet.packet_type == PacketType.IMAGE:
-                    self.change_picture.emit(new_packet)
-                else:
-                    self.change_incoming_message.emit(new_packet)
+                self.recieve_packet.emit(new_packet)
             except Empty:
                 continue
 
