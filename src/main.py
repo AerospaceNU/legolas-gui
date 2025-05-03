@@ -147,7 +147,7 @@ class GUI(QWidget):
         add_top_layout_label("Tracking Status:")
         self.track_status = add_top_layout_label("Not Tracking")
         add_top_layout_label("Recording Status:")
-        self.recording_status = add_top_layout_label("Not Recording")
+        self.recording_status = add_top_layout_label("OFF")
 
         # === Main Content ===
         main_content = QWidget()
@@ -171,21 +171,27 @@ class GUI(QWidget):
         # self.general_msg_label.setText("")
 
         # for i in range(4):
-        #     right_layout.addWidget(QLabel(f"Right Label {i+1}"))
+        #     right_layout.addWidget(QLabel(f"Right Label {i+1}")
         right_layout.addWidget(self.incoming_msg_label)
         right_layout.addWidget(self.general_msg_label)
+
+        start_record_button = QPushButton("start record")
+        start_record_button.clicked.connect(self.send_start_recording)
+        stop_record_button = QPushButton("stop record")
+        stop_record_button.clicked.connect(self.send_stop_recording)
         
-        self.start_tracking_button = QPushButton("start tracking", self)
+        
+        start_tracking_button = QPushButton("start tracking")
+        start_tracking_button.clicked.connect(self.send_track_obj_msg)
         self.potential_current_id = -1
-        self.start_tracking_button.clicked.connect(self.send_track_obj_msg)
-        self.stop_track_button = QPushButton("stop tracking", self)
-        self.stop_track_button.clicked.connect(self.send_stop_track_msg)
+        stop_track_button = QPushButton("stop tracking", self)
+        stop_track_button.clicked.connect(self.send_stop_track_msg)
 
 
 
         # self.button.clicked.connect(self.on_click)
-        right_layout.addWidget(self.start_tracking_button)
-        right_layout.addWidget(self.stop_track_button)
+        right_layout.addWidget(start_tracking_button)
+        right_layout.addWidget(stop_track_button)
 
         def make_param_box(label: str, default_value: float):
             retlabel = QLabel(label)
@@ -202,25 +208,12 @@ class GUI(QWidget):
         self.pitch_kp = make_param_box("Pitch k_p: ", 0.025)
         self.pitch_ki = make_param_box("Pitch k_i: ", 0.0002)
 
-        # yaw_kp_label = QLabel("Yaw k_p: ")
-        # self.yaw_kp = QSlider()
-        # self.yaw_kp.setOrientation(Qt.Horizontal)
-        # self.yaw_kp.setRange(-1000, 1000)
+        update_params_button = QPushButton("send params")
+        update_params_button.clicked.connect(self.send_param_update)
+        right_layout.addWidget(update_params_button)
 
-        # yaw_ki_label = QLabel("Yaw k_i: ")
-        # self.yaw_ki = QSlider()
-        # self.yaw_ki.setOrientation(Qt.Horizontal)
-        # self.yaw_ki.setRange(-1000, 1000)
-
-        # pitch_kp_label = QLabel("Pitch k_p: ")
-        # self.pitch_kp = QSlider()
-        # self.pitch_kp.setOrientation(Qt.Horizontal)
-        # self.pitch_kp.setRange(-1000, 1000)
-
-        # pitch_ki_label = QLabel("Pitch k_i: ")
-        # self.pitch_ki = QSlider()
-        # self.pitch_ki.setOrientation(Qt.Horizontal)
-        # self.pitch_ki.setRange(-1000, 1000)
+        right_layout.addWidget(start_record_button)
+        right_layout.addWidget(stop_record_button)
 
 
 
@@ -261,11 +254,23 @@ class GUI(QWidget):
             self.general_msg_label.setText("nothing to update")
             return
         print("tracking obj id number", self.potential_current_id)
+        self.track_status.setText(f"tracking obj {self.potential_current_id}")
         self.outgoing_data.put(Packet(PacketType.CONTROL, BROADCAST_DEST, {"trackID": self.potential_current_id}))
         self.potential_current_id = -1
     
     def send_stop_track_msg(self):
+        self.track_status.setText("Not Tracking")
         self.outgoing_data.put(Packet(PacketType.CONTROL, BROADCAST_DEST, {"trackID": None}))
+
+    def send_start_recording(self):
+        self.recording_status.setText("ON")
+        self.outgoing_data.put(Packet(PacketType.CONTROL, BROADCAST_DEST, {"record": True}))
+    
+    def send_stop_recording(self):
+        self.recording_status.setText("OFF")
+        self.outgoing_data.put(Packet(PacketType.CONTROL, BROADCAST_DEST, {"record": False}))
+
+
         
     @pyqtSlot(tuple)
     def update_internal_id(self, coords: tuple):
@@ -282,7 +287,9 @@ class GUI(QWidget):
                 
 
     def send_param_update(self):
-        self.outgoing_data.put(Packet(PacketType.CONTROL, BROADCAST_DEST, {"gimbalParams": {"yaw": {"kp": self.yaw_kp.value(), "ki": self.yaw_ki.value()}, "pitch": {"kp": self.pitch_kp.value(), "ki": self.pitch_ki.value()}}}))
+        self.outgoing_data.put(Packet(PacketType.CONTROL, BROADCAST_DEST, {"gimbalParams": 
+                                                                           {"yaw": {"kp": self.yaw_kp.value(), "ki": self.yaw_ki.value()}, 
+                                                                            "pitch": {"kp": self.pitch_kp.value(), "ki": self.pitch_ki.value()}}}))
 
 
 
